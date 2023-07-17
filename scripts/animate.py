@@ -25,7 +25,6 @@ import csv, pdb, glob
 from safetensors import safe_open
 import math
 from pathlib import Path
-import shutil
 
 
 def main(args):
@@ -48,10 +47,10 @@ def main(args):
         for motion_module in motion_modules:
         
             ### >>> create validation pipeline >>> ###
-            tokenizer    = CLIPTokenizer.from_pretrained(args.pretrained_model_path, subfolder="tokenizer")
-            text_encoder = CLIPTextModel.from_pretrained(args.pretrained_model_path, subfolder="text_encoder")
-            vae          = AutoencoderKL.from_pretrained(args.pretrained_model_path, subfolder="vae")            
-            unet         = UNet3DConditionModel.from_pretrained_2d(args.pretrained_model_path, subfolder="unet", unet_additional_kwargs=OmegaConf.to_container(inference_config.unet_additional_kwargs))
+            tokenizer    = CLIPTokenizer.from_pretrained("D:\\AnimateDiff\\models\\StableDiffusion\\tokenizer\\")
+            text_encoder = CLIPTextModel.from_pretrained("D:\\AnimateDiff\\models\\StableDiffusion\\text_encoder\\")
+            vae          = AutoencoderKL.from_pretrained("D:\\AnimateDiff\\models\\StableDiffusion\\vae\\")             
+            unet         = UNet3DConditionModel.from_pretrained_2d("D:\\AnimateDiff\\models\\StableDiffusion\\unet\\", unet_additional_kwargs=OmegaConf.to_container(inference_config.unet_additional_kwargs))
 
             if is_xformers_available(): unet.enable_xformers_memory_efficient_attention()
             else: assert False
@@ -102,26 +101,13 @@ def main(args):
                     # pdb.set_trace()
                     if is_lora:
                         pipeline = convert_lora(pipeline, state_dict, alpha=model_config.lora_alpha)
-                    
-                    # additional networks
-                    if hasattr(model_config, 'additional_networks') and len(model_config.additional_networks) > 0:
-                        for lora_weights in model_config.additional_networks:
-                            add_state_dict = {}
-                            (lora_path, lora_alpha) = lora_weights.split(':')
-                            print(f"loading lora {lora_path} with weight {lora_alpha}")
-                            lora_alpha = float(lora_alpha.strip())
-                            with safe_open(lora_path.strip(), framework="pt", device="cpu") as f:
-                                for key in f.keys():
-                                    add_state_dict[key] = f.get_tensor(key)
-                            pipeline = convert_lora(pipeline, add_state_dict, alpha=lora_alpha)
-                            
+
             pipeline.to("cuda")
             ### <<< create validation pipeline <<< ###
 
             prompts      = model_config.prompt
             n_prompts    = list(model_config.n_prompt) * len(prompts) if len(model_config.n_prompt) == 1 else model_config.n_prompt
-            init_image   = model_config.init_image if hasattr(model_config, 'init_image') else None
-
+            
             random_seeds = model_config.get("seed", [-1])
             random_seeds = [random_seeds] if isinstance(random_seeds, int) else list(random_seeds)
             random_seeds = random_seeds * len(prompts) if len(random_seeds) == 1 else random_seeds
@@ -138,7 +124,6 @@ def main(args):
                 print(f"sampling {prompt} ...")
                 sample = pipeline(
                     prompt,
-                    init_image          = init_image,
                     negative_prompt     = n_prompt,
                     num_inference_steps = model_config.steps,
                     guidance_scale      = model_config.guidance_scale,
@@ -158,13 +143,11 @@ def main(args):
     save_videos_grid(samples, f"{savedir}/sample.gif", n_rows=4)
 
     OmegaConf.save(config, f"{savedir}/config.yaml")
-    if init_image is not None:
-        shutil.copy(init_image, f"{savedir}/init_image.jpg")
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--pretrained_model_path", type=str, default="models/StableDiffusion/stable-diffusion-v1-5",)
+    parser.add_argument("--pretrained_model_path", type=str, default="models/StableDiffusion/stable-diffusion-v1-5.safetensors",)
     parser.add_argument("--inference_config",      type=str, default="configs/inference/inference.yaml")    
     parser.add_argument("--config",                type=str, required=True)
     
