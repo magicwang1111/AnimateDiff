@@ -1,0 +1,2 @@
+conda activate animatediff
+python -m scripts.animate --config configs/prompts/1-ToonYou.yaml
